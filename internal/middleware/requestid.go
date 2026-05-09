@@ -1,0 +1,46 @@
+package middleware
+
+import (
+	"context"
+	"crypto/rand"
+	"encoding/hex"
+	"net/http"
+)
+
+type contextKey string
+
+const requestIDKey contextKey = "request_id"
+
+// RequestIDHeader is the HTTP header used to propagate or return the request ID.
+const RequestIDHeader = "X-Request-ID"
+
+// RequestID injects a unique identifier into each request context and response
+// header. If the client sends an X-Request-ID header it is reused; otherwise a
+// random one is generated.
+func RequestID(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		id := r.Header.Get(RequestIDHeader)
+		if id == "" {
+			id = newRequestID()
+		}
+
+		ctx := context.WithValue(r.Context(), requestIDKey, id)
+		w.Header().Set(RequestIDHeader, id)
+
+		next.ServeHTTP(w, r.WithContext(ctx))
+	})
+}
+
+// GetRequestID retrieves the request ID from the context, or empty string.
+func GetRequestID(ctx context.Context) string {
+	if id, ok := ctx.Value(requestIDKey).(string); ok {
+		return id
+	}
+	return ""
+}
+
+func newRequestID() string {
+	b := make([]byte, 16)
+	_, _ = rand.Read(b)
+	return hex.EncodeToString(b)
+}
