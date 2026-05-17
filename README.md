@@ -77,14 +77,49 @@ Copy `.env.example` to `.env.local` and source it, or export variables directly.
 
 ## API endpoints
 
+### Observabilidad
+
 | Method | Path | Description |
 |---|---|---|
 | `GET` | `/health` | Liveness probe |
 | `GET` | `/ready` | Readiness probe |
-| `GET` | `/api/v1/items` | List items |
-| `POST` | `/api/v1/items` | Create item |
-| `GET` | `/api/v1/items/{id}` | Get item by ID |
-| `DELETE` | `/api/v1/items/{id}` | Delete item |
+
+### Productos
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/api/v1/products` | Listar productos (`?limit`, `?page`, `?vendor`, `?status`, `?handle`) |
+| `GET` | `/api/v1/products/count` | Contar productos |
+| `GET` | `/api/v1/products/{id}` | Obtener producto |
+| `POST` | `/api/v1/products` | Crear producto |
+| `PUT` | `/api/v1/products/{id}` | Actualizar producto |
+| `DELETE` | `/api/v1/products/{id}` | Eliminar producto |
+
+### Colecciones
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/api/v1/collections` | Listar colecciones |
+| `GET` | `/api/v1/collections/{id}` | Obtener colección |
+| `GET` | `/api/v1/collections/{id}/products` | Productos de una colección |
+
+### Carrito
+
+| Method | Path | Description |
+|---|---|---|
+| `POST` | `/api/v1/cart` | Crear carrito |
+| `GET` | `/api/v1/cart/{token}` | Obtener carrito |
+| `POST` | `/api/v1/cart/{token}/items` | Añadir artículo |
+| `PATCH` | `/api/v1/cart/{token}/items/{item_id}` | Actualizar cantidad |
+| `DELETE` | `/api/v1/cart/{token}/items/{item_id}` | Eliminar artículo |
+
+### Pedidos
+
+| Method | Path | Description |
+|---|---|---|
+| `POST` | `/api/v1/orders` | Crear pedido (checkout desde carrito) |
+| `GET` | `/api/v1/orders` | Listar pedidos (`?financial_status`) |
+| `GET` | `/api/v1/orders/{id}` | Obtener pedido |
 
 ## Docker
 

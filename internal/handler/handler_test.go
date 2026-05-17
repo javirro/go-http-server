@@ -5,123 +5,108 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"strconv"
 	"testing"
 
 	"github.com/javier/go-http-server/internal/handler"
 )
 
-func TestHealth(t *testing.T) {
-	req := httptest.NewRequest(http.MethodGet, "/health", nil)
-	rec := httptest.NewRecorder()
+// ---- products ---------------------------------------------------------
 
-	handler.Health(rec, req)
+func TestListProducts(t *testing.T) {
+	mux := handler.NewRouter()
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/products", nil)
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
 	}
 
-	var resp handler.Envelope[handler.HealthResponse]
+	var resp handler.ProductsResponse
 	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
 
-	if resp.Data.Status != "ok" {
-		t.Errorf("status = %q, want ok", resp.Data.Status)
+	if len(resp.Products) == 0 {
+		t.Error("expected seeded products, got none")
 	}
 }
 
-func TestReady(t *testing.T) {
-	req := httptest.NewRequest(http.MethodGet, "/ready", nil)
+func TestCountProducts(t *testing.T) {
+	mux := handler.NewRouter()
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/products/count", nil)
 	rec := httptest.NewRecorder()
-
-	handler.Ready(rec, req)
+	mux.ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
 	}
+
+	var resp handler.CountResponse
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+
+	if resp.Count == 0 {
+		t.Error("expected non-zero product count")
+	}
 }
 
-func TestItemsCRUD(t *testing.T) {
+func TestGetProduct_NotFound(t *testing.T) {
 	mux := handler.NewRouter()
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/products/999999", nil)
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
 
-	// Create
-	body := bytes.NewBufferString(`{"name":"test item"}`)
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/items", body)
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusNotFound)
+	}
+}
+
+func TestGetProduct_InvalidID(t *testing.T) {
+	mux := handler.NewRouter()
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/products/abc", nil)
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusBadRequest)
+	}
+}
+
+func TestCreateProduct(t *testing.T) {
+	mux := handler.NewRouter()
+	body := bytes.NewBufferString(`{"product":{"title":"Camiseta Test FC","vendor":"Test Brand","status":"draft"}}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/products", body)
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusCreated {
-		t.Fatalf("create: status = %d, want %d\nbody: %s", rec.Code, http.StatusCreated, rec.Body)
+		t.Fatalf("status = %d, want %d\nbody: %s", rec.Code, http.StatusCreated, rec.Body)
 	}
 
-	var created handler.Envelope[handler.Item]
-	if err := json.NewDecoder(rec.Body).Decode(&created); err != nil {
-		t.Fatalf("decode created: %v", err)
+	var resp handler.ProductResponse
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode: %v", err)
 	}
-	if created.Data.Name != "test item" {
-		t.Errorf("name = %q, want test item", created.Data.Name)
+	if resp.Product.Title != "Camiseta Test FC" {
+		t.Errorf("title = %q, want %q", resp.Product.Title, "Camiseta Test FC")
 	}
-
-	// List
-	req = httptest.NewRequest(http.MethodGet, "/api/v1/items", nil)
-	rec = httptest.NewRecorder()
-	mux.ServeHTTP(rec, req)
-
-	if rec.Code != http.StatusOK {
-		t.Fatalf("list: status = %d, want %d", rec.Code, http.StatusOK)
-	}
-
-	// Get by ID
-	idStr := strconv.Itoa(created.Data.ID)
-	req = httptest.NewRequest(http.MethodGet, "/api/v1/items/"+idStr, nil)
-	rec = httptest.NewRecorder()
-	mux.ServeHTTP(rec, req)
-
-	if rec.Code != http.StatusOK {
-		t.Fatalf("get: status = %d, want %d", rec.Code, http.StatusOK)
-	}
-
-	// Delete
-	req = httptest.NewRequest(http.MethodDelete, "/api/v1/items/"+idStr, nil)
-	rec = httptest.NewRecorder()
-	mux.ServeHTTP(rec, req)
-
-	if rec.Code != http.StatusNoContent {
-		t.Fatalf("delete: status = %d, want %d", rec.Code, http.StatusNoContent)
-	}
-
-	// Get after delete → 404
-	req = httptest.NewRequest(http.MethodGet, "/api/v1/items/"+idStr, nil)
-	rec = httptest.NewRecorder()
-	mux.ServeHTTP(rec, req)
-
-	if rec.Code != http.StatusNotFound {
-		t.Fatalf("get deleted: status = %d, want %d", rec.Code, http.StatusNotFound)
+	if resp.Product.ID == 0 {
+		t.Error("expected non-zero product id")
 	}
 }
 
-func TestCreateItem_MissingName(t *testing.T) {
+func TestCreateProduct_MissingTitle(t *testing.T) {
 	mux := handler.NewRouter()
-	body := bytes.NewBufferString(`{"name":""}`)
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/items", body)
+	body := bytes.NewBufferString(`{"product":{"title":""}}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/products", body)
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("status = %d, want %d", rec.Code, http.StatusUnprocessableEntity)
-	}
-}
-
-func TestGetItem_InvalidID(t *testing.T) {
-	mux := handler.NewRouter()
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/items/abc", nil)
-	rec := httptest.NewRecorder()
-	mux.ServeHTTP(rec, req)
-
-	if rec.Code != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", rec.Code, http.StatusBadRequest)
 	}
 }
