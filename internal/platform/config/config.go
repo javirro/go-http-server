@@ -36,6 +36,11 @@ type Config struct {
 	RateLimitRPS   float64
 	RateLimitBurst int
 
+	// Database (PostgreSQL)
+	DatabaseURL   string        // pgx-compatible DSN
+	DBMaxConns    int32         // max connections in the pool
+	DBConnTimeout time.Duration // timeout for establishing/pinging the connection
+
 	// Environment
 	Env string // "development" | "staging" | "production"
 }
@@ -62,6 +67,9 @@ func Load() (*Config, error) {
 		}),
 		RateLimitRPS:   getEnvFloat("RATE_LIMIT_RPS", 100),
 		RateLimitBurst: getEnvInt("RATE_LIMIT_BURST", 200),
+		DatabaseURL:    getEnv("DATABASE_URL", "postgres://app:secret@localhost:5432/football_store?sslmode=disable"),
+		DBMaxConns:     int32(getEnvInt("DB_MAX_CONNS", 10)),
+		DBConnTimeout:  getEnvDuration("DB_CONN_TIMEOUT", 5*time.Second),
 		Env:            getEnv("ENV", "development"),
 	}
 
@@ -100,6 +108,14 @@ func (c *Config) validate() error {
 
 	if c.RateLimitBurst < 1 {
 		errs = append(errs, fmt.Errorf("RATE_LIMIT_BURST must be at least 1, got %d", c.RateLimitBurst))
+	}
+
+	if c.DatabaseURL == "" {
+		errs = append(errs, errors.New("DATABASE_URL must be set"))
+	}
+
+	if c.DBMaxConns < 1 {
+		errs = append(errs, fmt.Errorf("DB_MAX_CONNS must be at least 1, got %d", c.DBMaxConns))
 	}
 
 	return errors.Join(errs...)

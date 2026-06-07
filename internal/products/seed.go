@@ -2,34 +2,12 @@ package products
 
 import (
 	"fmt"
-	"sync"
 	"time"
 )
 
-// shopStore is the in-memory store backing the product repository.
-type shopStore struct {
-	mu sync.RWMutex
-
-	products   map[int64]*Product
-	productSeq int64
-}
-
-func newShopStore() *shopStore {
-	s := &shopStore{
-		products: make(map[int64]*Product),
-	}
-	s.seed()
-	return s
-}
-
-// nextProductID allocates the next product ID (must hold the write lock).
-func (s *shopStore) nextProductID() int64 {
-	s.productSeq++
-	return s.productSeq
-}
-
-// seed pre-populates the store with football team jersey products.
-func (s *shopStore) seed() {
+// seedProducts builds the catalogue of football team jersey products used to
+// pre-populate the database on first boot.
+func seedProducts() []Product {
 	now := time.Date(2024, 7, 1, 0, 0, 0, 0, time.UTC)
 	pub := now
 
@@ -147,9 +125,11 @@ func (s *shopStore) seed() {
 		},
 	}
 
+	products := make([]Product, 0, len(seeds))
+	var pid int64
+
 	for _, seed := range seeds {
-		s.productSeq++
-		pid := s.productSeq
+		pid++
 
 		imgID := pid*100 + 1
 		altStr := seed.imageAlt
@@ -175,7 +155,7 @@ func (s *shopStore) seed() {
 			Values:    sizes,
 		}
 
-		var variants []Variant
+		variants := make([]Variant, 0, len(sizes))
 		for i, size := range sizes {
 			vid := pid*1000 + int64(i+1)
 			sku := fmt.Sprintf("%s-%s", seed.handle, size)
@@ -206,7 +186,8 @@ func (s *shopStore) seed() {
 			})
 		}
 
-		p := &Product{
+		image := img
+		products = append(products, Product{
 			ID:          pid,
 			Title:       seed.title,
 			Handle:      seed.handle,
@@ -218,11 +199,12 @@ func (s *shopStore) seed() {
 			Options:     []ProductOption{option},
 			Variants:    variants,
 			Images:      []ProductImage{img},
-			Image:       &img,
+			Image:       &image,
 			CreatedAt:   now,
 			UpdatedAt:   now,
 			PublishedAt: &pub,
-		}
-		s.products[pid] = p
+		})
 	}
+
+	return products
 }

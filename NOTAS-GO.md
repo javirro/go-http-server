@@ -265,3 +265,122 @@ La ruta de import es **relativa al `module`** declarado en `go.mod` (`github.com
 3. Tras mover, actualiza **todos** los `import` que apuntaban ahí.
 4. Lo que use otro paquete debe estar **exportado** (mayúscula) y cualificado (`paquete.Símbolo`).
 5. Verifica con `go build ./...` y `go vet ./...` (compilan todos los paquetes del módulo).
+
+---
+
+## Conexión a base de datos: por qué `pgx` (`jackc/pgx`)
+
+Para PostgreSQL en Go, la librería más usada en producción hoy es **`pgx`** (`github.com/jackc/pgx/v5`), normalmente a través de su pool de conexiones **`pgxpool`**. Es la opción recomendada por la comunidad y la base sobre la que se apoyan muchos ORMs/generadores (por ejemplo `sqlc`).
+
+### El panorama de opciones
+
+| Opción | Qué es | Estado / uso |
+|---|---|---|
+| `database/sql` (stdlib) | API genérica de SQL; **necesita un driver** aparte | Estándar, pero es solo la abstracción, no habla con Postgres por sí sola |
+| `lib/pq` | Driver clásico de Postgres para `database/sql` | En **modo mantenimiento**; el propio repo recomienda migrar a `pgx` |
+| **`pgx`** | Driver + toolkit nativo de Postgres | **Recomendado en producción**; activo, rápido, soporta tipos de Postgres |
+| ORMs (GORM, etc.) | Capa de abstracción sobre el driver | Útiles, pero por debajo suelen usar un driver como `pgx` |
+
+### Por qué `pgx` y no `database/sql` + `lib/pq`
+
+- **Rendimiento**: usa el protocolo binario de Postgres y hace menos copias/parseos que `lib/pq`.
+- **Tipos nativos**: soporta de forma natural tipos propios de Postgres (`jsonb`, arrays, `uuid`, `numeric`, etc.).
+- **Mantenimiento activo**: `lib/pq` está congelado; `pgx` recibe mejoras y fixes.
+- **Pool de calidad**: `pgxpool` es un pool pensado para concurrencia (cada request HTTP es una goroutine), con control de conexiones máximas, healthchecks y reciclado.
+
+> Nota: `pgx` puede usarse de dos formas: con su **API nativa** (`pgx`/`pgxpool`, lo que usamos aquí) o como **driver de `database/sql`** (`stdlib`). La API nativa da acceso a todas las features de Postgres; la vía `database/sql` aporta portabilidad si algún día cambias de motor.
+
+### Cómo está montado en este proyecto
+
+La conexión vive en `internal/platform/database/postgres.go` y expone un único constructor:
+
+```go
+func NewPool(ctx context.Context, cfg *config.Config) (*pgxpool.Pool, error)
+```
+
+Pasos clave:
+
+1. `pgxpool.ParseConfig(cfg.DatabaseURL)` parsea el **DSN** (`postgres://user:pass@host:port/db?sslmode=...`).
+2. Se ajusta `MaxConns` (tamaño máximo del pool) desde configuración.
+3. `pgxpool.NewWithConfig(...)` crea el **pool** (no una sola conexión).
+4. `pool.Ping(...)` con timeout verifica que la DB responde **antes** de aceptar tráfico (fail-fast en el arranque).
+
+### El pool y la concurrencia
+
+`*pgxpool.Pool` es **seguro para uso concurrente**: se crea **una vez** en `main` y se comparte entre todas las goroutines (una por request). No se abre una conexión por request; el pool las reparte y reutiliza. Por eso:
+
+- Se construye en el arranque y se inyecta hacia abajo (repositorios).
+- Se cierra una sola vez al apagar: `defer pool.Close()`.
+
+### Configuración (variables de entorno)
+
+| Variable | Default | Significado |
+|---|---|---|
+| `DATABASE_URL` | `postgres://app:secret@localhost:5432/football_store?sslmode=disable` | DSN de conexión |
+| `DB_MAX_CONNS` | `10` | Conexiones máximas en el pool |
+| `DB_CONN_TIMEOUT` | `5s` | Timeout para conectar/hacer ping |
+
+El default apunta al Postgres del `docker-compose.yml`. Para levantarlo en local:
+
+```bash
+make db-up      # docker compose up -d
+make db-logs    # ver logs
+make db-down    # parar (conserva el volumen de datos)
+```
+
+### Persistencia de productos en PostgreSQL
+
+El repositorio de productos se persiste en **PostgreSQL**. La interfaz `ProductRepository` define el contrato y `PostgresProductRepository` es la única implementación; el resto de la app (servicio, controlador, rutas) depende de la interfaz, no de la implementación:
+
+```go
+type ProductRepository interface {
+    List(ctx context.Context, filters ProductFilters) ([]Product, error)
+    Count(ctx context.Context) (int, error)
+    GetByID(ctx context.Context, id int64) (Product, error)
+    Create(ctx context.Context, product Product) (Product, error)
+    Update(ctx context.Context, product Product) (Product, error)
+    Delete(ctx context.Context, id int64) error
+}
+```
+
+- `PostgresProductRepository` → `NewPostgresRepository(pool)`, en `internal/products/product_repository_postgres.go`.
+
+> Se mantiene la **interfaz** aunque haya una sola implementación: es la costura que permite inyectar dependencias (`main` construye el repo y lo pasa a `routes.NewRouter(repo)`) y sustituirlo en los tests sin tocar el resto del código.
+
+Los tests de `products` son **de integración**: usan el repo Postgres real y se **saltan** (`t.Skip`) si no hay base de datos accesible, de modo que `go test ./...` sigue pasando sin DB. Con `make db-up` levantada, se ejecutan de verdad.
+
+#### ctx + errores en la interfaz
+
+Al pasar a una DB real, los métodos del repositorio ahora reciben `context.Context` (para timeouts/cancelación de la request, viaja desde `r.Context()`) y devuelven `error`. Un producto inexistente se reporta con el centinela `ErrProductNotFound`, que el controlador traduce a `404`.
+
+#### Modelo relacional con JSONB
+
+El producto tiene colecciones anidadas (`options`, `variants`, `images`). En lugar de normalizarlas en varias tablas con joins, se guarda un **híbrido**:
+
+- Campos escalares y filtrables como columnas (`title`, `handle`, `vendor`, `product_type`, `status`, ...).
+- Colecciones anidadas como columnas **`JSONB`**.
+
+Esto encaja muy bien con `pgx`, que sabe serializar/deserializar `JSONB` directamente a/desde structs y slices de Go (vía `encoding/json`). Así el `scan` puede leer `&p.Options`, `&p.Variants`, `&p.Images` sin trabajo manual, y los filtros (`vendor`, `status`, etc.) siguen siendo columnas indexadas.
+
+#### Migraciones
+
+Las migraciones viven en `internal/platform/database/migrations/` como ficheros versionados (`0001_create_products.up.sql` / `.down.sql`) y se **embeben en el binario** con `//go:embed`. Un migrador minimalista (`database.Migrate`) crea una tabla `schema_migrations`, y aplica en orden solo las versiones que falten, cada una dentro de una transacción (idempotente). Se ejecuta al arrancar, antes de servir tráfico.
+
+> Nota: aquí el migrador es casero y minimalista con fines didácticos. En proyectos grandes se suele usar una herramienta dedicada como **`golang-migrate`** o **`goose`**.
+
+#### Seed
+
+`PostgresProductRepository.Seed` inserta el catálogo inicial **solo si la tabla está vacía** (reutiliza `seedProducts()`, el mismo que usa el repo en memoria). Como inserta IDs explícitos, después avanza la secuencia `IDENTITY` con `setval(pg_get_serial_sequence(...))` para que los `INSERT` posteriores no colisionen.
+
+#### Flujo de arranque en `main`
+
+```
+config.Load → logger → database.NewPool (Ping) → database.Migrate → productRepo.Seed → routes.NewRouter(repo) → server.Start
+```
+
+Para probarlo en local:
+
+```bash
+make db-up    # levanta Postgres
+make run      # migra, siembra y arranca la API
+```

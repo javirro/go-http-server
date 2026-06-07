@@ -8,9 +8,11 @@ import (
 	"syscall"
 
 	"github.com/javier/go-http-server/internal/platform/config"
+	"github.com/javier/go-http-server/internal/platform/database"
+	"github.com/javier/go-http-server/internal/platform/server/httpserver"
 	"github.com/javier/go-http-server/internal/platform/server/middleware"
 	"github.com/javier/go-http-server/internal/platform/server/routes"
-	"github.com/javier/go-http-server/internal/platform/server/httpserver"
+	"github.com/javier/go-http-server/internal/products"
 )
 
 // In Go, os.Exit terminates the process immediately — it does not run any defer statements.
@@ -35,6 +37,28 @@ func run() int {
 	// Build the logger.
 	logger := buildLogger(cfg)
 
+	// Connect to the database and verify connectivity before serving traffic.
+	pool, err := database.NewPool(context.Background(), cfg)
+	if err != nil {
+		logger.Error("failed to connect to database", slog.Any("error", err))
+		return 1
+	}
+	defer pool.Close()
+	logger.Info("connected to database")
+
+	// Apply database migrations.
+	if err := database.Migrate(context.Background(), pool); err != nil {
+		logger.Error("failed to run migrations", slog.Any("error", err))
+		return 1
+	}
+
+	// Build the product repository (PostgreSQL) and seed it on first boot.
+	productRepo := products.NewPostgresRepository(pool)
+	if err := productRepo.Seed(context.Background()); err != nil {
+		logger.Error("failed to seed products", slog.Any("error", err))
+		return 1
+	}
+
 	// Build the middleware chain (outermost first). This is a chain of middleware functions
 	// that will be applied to the request in the order they are defined.
 	rateLimiter := middleware.NewRateLimiter(cfg.RateLimitRPS, cfg.RateLimitBurst)
@@ -49,7 +73,7 @@ func run() int {
 	)
 
 	// Build the router.
-	mux := routes.NewRouter()
+	mux := routes.NewRouter(productRepo)
 
 	// Build the server.
 	srv := httpserver.New(chain(mux), cfg, logger)

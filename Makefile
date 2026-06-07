@@ -7,7 +7,7 @@ GO         := $(shell which go 2>/dev/null || echo /usr/local/go/bin/go)
 GOFLAGS    := -trimpath
 LDFLAGS    := -s -w
 
-.PHONY: all build run test test-race lint vet fmt tidy clean docker-build docker-run help
+.PHONY: all build run test test-race lint vet fmt tidy clean docker-build docker-run db-up db-down db-logs help
 
 all: build
 
@@ -49,6 +49,18 @@ tidy:
 ## Remove build artifacts
 clean:
 	@rm -rf $(BUILD_DIR) coverage.out coverage.html
+
+## Start the local database (Postgres) in the background
+db-up:
+	docker compose up -d
+
+## Stop the local database (keeps the data volume)
+db-down:
+	docker compose down
+
+## Tail the database logs
+db-logs:
+	docker compose logs -f postgres
 
 ## Build Docker image
 docker-build:

@@ -21,7 +21,7 @@ func NewProductController(service *ProductService) *ProductController {
 // List handles GET /api/v1/products
 func (c *ProductController) List(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
-	products := c.service.List(ListProductsParams{
+	products, err := c.service.List(r.Context(), ListProductsParams{
 		Limit:       queryInt(q.Get("limit"), 50),
 		Page:        queryInt(q.Get("page"), 1),
 		Vendor:      q.Get("vendor"),
@@ -29,12 +29,21 @@ func (c *ProductController) List(w http.ResponseWriter, r *http.Request) {
 		Status:      q.Get("status"),
 		Handle:      q.Get("handle"),
 	})
+	if err != nil {
+		c.writeServiceError(w, r, err)
+		return
+	}
 	respond.JSON(w, r, http.StatusOK, ProductsResponse{Products: products})
 }
 
 // Count handles GET /api/v1/products/count
 func (c *ProductController) Count(w http.ResponseWriter, r *http.Request) {
-	respond.JSON(w, r, http.StatusOK, CountResponse{Count: c.service.Count()})
+	n, err := c.service.Count(r.Context())
+	if err != nil {
+		c.writeServiceError(w, r, err)
+		return
+	}
+	respond.JSON(w, r, http.StatusOK, CountResponse{Count: n})
 }
 
 // Get handles GET /api/v1/products/{id}
@@ -44,7 +53,7 @@ func (c *ProductController) Get(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	product, err := c.service.GetByID(id)
+	product, err := c.service.GetByID(r.Context(), id)
 	if err != nil {
 		c.writeServiceError(w, r, err)
 		return
@@ -60,7 +69,7 @@ func (c *ProductController) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	product, err := c.service.Create(input)
+	product, err := c.service.Create(r.Context(), input)
 	if err != nil {
 		c.writeServiceError(w, r, err)
 		return
@@ -82,7 +91,7 @@ func (c *ProductController) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	product, err := c.service.Update(id, input)
+	product, err := c.service.Update(r.Context(), id, input)
 	if err != nil {
 		c.writeServiceError(w, r, err)
 		return
@@ -98,7 +107,7 @@ func (c *ProductController) Delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := c.service.Delete(id); err != nil {
+	if err := c.service.Delete(r.Context(), id); err != nil {
 		c.writeServiceError(w, r, err)
 		return
 	}

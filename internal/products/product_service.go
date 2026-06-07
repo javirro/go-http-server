@@ -1,6 +1,7 @@
 package products
 
 import (
+	"context"
 	"errors"
 	"strings"
 	"time"
@@ -33,7 +34,7 @@ func NewProductService(repo ProductRepository) *ProductService {
 	return &ProductService{repo: repo}
 }
 
-func (s *ProductService) List(params ListProductsParams) []Product {
+func (s *ProductService) List(ctx context.Context, params ListProductsParams) ([]Product, error) {
 	limit := params.Limit
 	if limit < 1 || limit > 250 {
 		limit = 50
@@ -43,37 +44,36 @@ func (s *ProductService) List(params ListProductsParams) []Product {
 		page = 1
 	}
 
-	products := s.repo.List(ProductFilters{
+	products, err := s.repo.List(ctx, ProductFilters{
 		Vendor:      strings.ToLower(params.Vendor),
 		ProductType: strings.ToLower(params.ProductType),
 		Status:      params.Status,
 		Handle:      params.Handle,
 	})
+	if err != nil {
+		return nil, err
+	}
 
 	start := (page - 1) * limit
 	if start >= len(products) {
-		return []Product{}
+		return []Product{}, nil
 	}
 	end := start + limit
 	if end > len(products) {
 		end = len(products)
 	}
-	return products[start:end]
+	return products[start:end], nil
 }
 
-func (s *ProductService) Count() int {
-	return s.repo.Count()
+func (s *ProductService) Count(ctx context.Context) (int, error) {
+	return s.repo.Count(ctx)
 }
 
-func (s *ProductService) GetByID(id int64) (Product, error) {
-	product, exists := s.repo.GetByID(id)
-	if !exists {
-		return Product{}, ErrProductNotFound
-	}
-	return product, nil
+func (s *ProductService) GetByID(ctx context.Context, id int64) (Product, error) {
+	return s.repo.GetByID(ctx, id)
 }
 
-func (s *ProductService) Create(input CreateProductInput) (Product, error) {
+func (s *ProductService) Create(ctx context.Context, input CreateProductInput) (Product, error) {
 	title := strings.TrimSpace(input.Product.Title)
 	if title == "" {
 		return Product{}, ValidationError{Message: "product title is required"}
@@ -112,13 +112,13 @@ func (s *ProductService) Create(input CreateProductInput) (Product, error) {
 		PublishedAt: publishedAt,
 	}
 
-	return s.repo.Create(product), nil
+	return s.repo.Create(ctx, product)
 }
 
-func (s *ProductService) Update(id int64, input UpdateProductInput) (Product, error) {
-	product, exists := s.repo.GetByID(id)
-	if !exists {
-		return Product{}, ErrProductNotFound
+func (s *ProductService) Update(ctx context.Context, id int64, input UpdateProductInput) (Product, error) {
+	product, err := s.repo.GetByID(ctx, id)
+	if err != nil {
+		return Product{}, err
 	}
 
 	if t := strings.TrimSpace(input.Product.Title); t != "" {
@@ -142,18 +142,11 @@ func (s *ProductService) Update(id int64, input UpdateProductInput) (Product, er
 	}
 	product.UpdatedAt = time.Now().UTC()
 
-	updated, ok := s.repo.Update(product)
-	if !ok {
-		return Product{}, ErrProductNotFound
-	}
-	return updated, nil
+	return s.repo.Update(ctx, product)
 }
 
-func (s *ProductService) Delete(id int64) error {
-	if ok := s.repo.Delete(id); !ok {
-		return ErrProductNotFound
-	}
-	return nil
+func (s *ProductService) Delete(ctx context.Context, id int64) error {
+	return s.repo.Delete(ctx, id)
 }
 
 func slugify(s string) string {

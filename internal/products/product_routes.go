@@ -2,10 +2,9 @@ package products
 
 import "net/http"
 
-// Register wires the product feature (repository → service → controller) and
-// registers its HTTP routes on the given mux.
-func Register(mux *http.ServeMux) {
-	repo := NewInMemoryProductRepository(newShopStore())
+// Register wires the product feature (service → controller) on top of the
+// given repository and registers its HTTP routes on the mux.
+func Register(mux *http.ServeMux, repo ProductRepository) {
 	service := NewProductService(repo)
 	controller := NewProductController(service)
 	registerProductRoutes(mux, controller)
