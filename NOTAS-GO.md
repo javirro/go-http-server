@@ -52,6 +52,44 @@ Puntos clave:
 
 Go se encarga de la memoria automáticamente: si devuelves un puntero a una variable local, el compilador la mueve al heap cuando hace falta (escape analysis).
 
+### Servicios, controllers y repositorios: ¿siempre puntero?
+
+En la práctica, casi siempre sí. La razón no es convención sino una regla del sistema de tipos:
+
+> Si **algún** método del tipo tiene receptor `*T`, el valor plano `T` **no implementa** la interfaz que requiere esos métodos. Hay que usar `*T`.
+
+Y en servicios, controllers y repos **siempre** habrá al menos un campo interno (`repo`, `pool`, `service`...) y métodos que lo usan con receptor `*T`.
+
+Las tres razones concretas que aplican en este proyecto:
+
+| Razón | Qué implica |
+|---|---|
+| Métodos con receptor `*T` | El valor `T` no satisface la interfaz que espera el consumidor |
+| Evitar copias innecesarias | El struct con sus campos (interfaces, punteros) se pasa varios niveles hacia abajo |
+| Instancia larga compartida | Se crea una vez en `main` y vive durante todo el proceso |
+
+En cambio, los DTOs y modelos de dominio se pasan como valor porque son datos puros sin métodos:
+
+```go
+// Puntero: tiene estado interno + métodos con receptor *T
+type ProductService struct { repo ProductRepository }
+func (s *ProductService) List(ctx context.Context, ...) {}
+
+// Valor: es un dato puro, se copia sin problema
+type ListProductsParams struct { Limit int; Vendor string }
+type Product struct { ID int64; Title string; ... }
+```
+
+**Tabla resumen para este proyecto:**
+
+| Tipo | Puntero | Por qué |
+|---|---|---|
+| `PostgresProductRepository` | `*T` | tiene `pool *pgxpool.Pool` + métodos con receptor `*T` |
+| `ProductService` | `*T` | tiene `repo ProductRepository` + métodos con receptor `*T` |
+| `ProductController` | `*T` | tiene `service *ProductService` + métodos con receptor `*T` |
+| `Product`, `Variant`, `ProductImage` | valor `T` | DTOs/dominio, se pasan como copia |
+| `ListProductsParams`, `ProductFilters` | valor `T` | structs de parámetros, pequeños e inmutables |
+
 ---
 
 ## Struct tags para JSON

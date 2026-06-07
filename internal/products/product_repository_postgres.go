@@ -37,6 +37,14 @@ const productColumns = `id, title, handle, body_html, vendor, product_type, tags
 
 // PostgresProductRepository persists products in PostgreSQL using pgxpool.
 // Nested collections (options, variants, images) are stored as JSONB.
+//
+// Se devuelve como puntero (*PostgresProductRepository) porque:
+//  1. Sus métodos tienen receptor *PostgresProductRepository, por lo que el
+//     valor plano no implementaría la interfaz ProductRepository.
+//  2. Contiene un *pgxpool.Pool (ya es un puntero), copiar el struct sería
+//     inútil y confuso.
+//  3. Es una instancia que vive toda la vida del proceso (se crea en main y
+//     se comparte entre goroutines/requests concurrentes).
 type PostgresProductRepository struct {
 	pool *pgxpool.Pool
 }

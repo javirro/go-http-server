@@ -26,6 +26,14 @@ type ListProductsParams struct {
 }
 
 // ProductService holds product business logic.
+//
+// Se devuelve como puntero (*ProductService) por tres razones:
+//  1. Sus métodos tienen receptor *ProductService: en Go, si cualquier método
+//     usa *T, el valor plano T no satisface la interfaz implícita que espera
+//     quien lo consume (ProductController), por lo que hay que devolver *T.
+//  2. Evita copiar el struct (con su campo repo) en cada asignación.
+//  3. Señala que es una instancia larga, creada una vez y compartida durante
+//     toda la vida del proceso, no un dato temporal.
 type ProductService struct {
 	repo ProductRepository
 }

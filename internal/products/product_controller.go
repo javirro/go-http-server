@@ -10,6 +10,10 @@ import (
 )
 
 // ProductController maps HTTP requests to product service operations.
+//
+// Se devuelve como puntero (*ProductController) por las mismas razones que
+// ProductService: sus métodos tienen receptor *ProductController, tiene un
+// campo interno (service) y es una instancia larga compartida por el proceso.
 type ProductController struct {
 	service *ProductService
 }
