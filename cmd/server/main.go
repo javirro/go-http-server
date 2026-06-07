@@ -7,10 +7,10 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/javier/go-http-server/internal/config"
-	"github.com/javier/go-http-server/internal/handler"
-	"github.com/javier/go-http-server/internal/middleware"
-	"github.com/javier/go-http-server/internal/server"
+	"github.com/javier/go-http-server/internal/platform/config"
+	"github.com/javier/go-http-server/internal/platform/server/middleware"
+	"github.com/javier/go-http-server/internal/platform/server/routes"
+	"github.com/javier/go-http-server/internal/platform/server/httpserver"
 )
 
 // In Go, os.Exit terminates the process immediately — it does not run any defer statements.
@@ -49,10 +49,10 @@ func run() int {
 	)
 
 	// Build the router.
-	mux := handler.NewRouter()
+	mux := routes.NewRouter()
 
 	// Build the server.
-	srv := server.New(chain(mux), cfg, logger)
+	srv := httpserver.New(chain(mux), cfg, logger)
 
 	// Listen for OS termination signals.
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)

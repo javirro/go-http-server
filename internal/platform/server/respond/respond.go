@@ -1,11 +1,11 @@
-package handler
+package respond
 
 import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
 
-	"github.com/javier/go-http-server/internal/middleware"
+	"github.com/javier/go-http-server/internal/platform/server/middleware"
 )
 
 // Envelope is the standard JSON response wrapper.

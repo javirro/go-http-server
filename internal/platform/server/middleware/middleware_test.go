@@ -7,7 +7,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/javier/go-http-server/internal/middleware"
+	"github.com/javier/go-http-server/internal/platform/server/middleware"
 )
 
 func nopHandler(status int) http.Handler {

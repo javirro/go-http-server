@@ -1,4 +1,4 @@
-package server
+package httpserver
 
 import (
 	"context"
@@ -10,7 +10,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/javier/go-http-server/internal/config"
+	"github.com/javier/go-http-server/internal/platform/config"
 )
 
 // Server wraps net/http.Server with lifecycle management.

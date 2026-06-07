@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/javier/go-http-server/internal/config"
+	"github.com/javier/go-http-server/internal/platform/config"
 )
 
 func TestLoad_Defaults(t *testing.T) {

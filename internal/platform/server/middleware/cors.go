@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/javier/go-http-server/internal/config"
+	"github.com/javier/go-http-server/internal/platform/config"
 )
 
 // CORS adds Cross-Origin Resource Sharing headers based on the provided config.

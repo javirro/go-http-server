@@ -1,4 +1,4 @@
-package handler_test
+package products_test
 
 import (
 	"bytes"
@@ -7,13 +7,14 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/javier/go-http-server/internal/handler"
+	"github.com/javier/go-http-server/internal/platform/server/routes"
+	"github.com/javier/go-http-server/internal/products"
 )
 
 // ---- products ---------------------------------------------------------
 
 func TestListProducts(t *testing.T) {
-	mux := handler.NewRouter()
+	mux := routes.NewRouter()
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/products", nil)
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, req)
@@ -22,7 +23,7 @@ func TestListProducts(t *testing.T) {
 		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
 	}
 
-	var resp handler.ProductsResponse
+	var resp products.ProductsResponse
 	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
@@ -33,7 +34,7 @@ func TestListProducts(t *testing.T) {
 }
 
 func TestCountProducts(t *testing.T) {
-	mux := handler.NewRouter()
+	mux := routes.NewRouter()
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/products/count", nil)
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, req)
@@ -42,7 +43,7 @@ func TestCountProducts(t *testing.T) {
 		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
 	}
 
-	var resp handler.CountResponse
+	var resp products.CountResponse
 	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
@@ -53,7 +54,7 @@ func TestCountProducts(t *testing.T) {
 }
 
 func TestGetProduct_NotFound(t *testing.T) {
-	mux := handler.NewRouter()
+	mux := routes.NewRouter()
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/products/999999", nil)
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, req)
@@ -64,7 +65,7 @@ func TestGetProduct_NotFound(t *testing.T) {
 }
 
 func TestGetProduct_InvalidID(t *testing.T) {
-	mux := handler.NewRouter()
+	mux := routes.NewRouter()
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/products/abc", nil)
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, req)
@@ -75,7 +76,7 @@ func TestGetProduct_InvalidID(t *testing.T) {
 }
 
 func TestCreateProduct(t *testing.T) {
-	mux := handler.NewRouter()
+	mux := routes.NewRouter()
 	body := bytes.NewBufferString(`{"product":{"title":"Camiseta Test FC","vendor":"Test Brand","status":"draft"}}`)
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/products", body)
 	req.Header.Set("Content-Type", "application/json")
@@ -86,7 +87,7 @@ func TestCreateProduct(t *testing.T) {
 		t.Fatalf("status = %d, want %d\nbody: %s", rec.Code, http.StatusCreated, rec.Body)
 	}
 
-	var resp handler.ProductResponse
+	var resp products.ProductResponse
 	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
@@ -99,7 +100,7 @@ func TestCreateProduct(t *testing.T) {
 }
 
 func TestCreateProduct_MissingTitle(t *testing.T) {
-	mux := handler.NewRouter()
+	mux := routes.NewRouter()
 	body := bytes.NewBufferString(`{"product":{"title":""}}`)
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/products", body)
 	req.Header.Set("Content-Type", "application/json")

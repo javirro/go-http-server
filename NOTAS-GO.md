@@ -191,3 +191,77 @@ func ListProducts(w http.ResponseWriter, r *http.Request) {---}
 
 - r *http.Request se pasa como puntero para evitar copias innecesarias y trabajar con la misma instancia del request durante el ciclo de vida de la petición.
 - w http.ResponseWriter es una interfaz: el valor concreto que implementa esa interfaz ya se pasa dentro de ella (normalmente por referencia), por eso se usa la interfaz directamente y no *http.ResponseWriter.
+
+---
+
+## Un directorio = un paquete (causa de los errores al reorganizar carpetas)
+
+Al mover los archivos a una estructura nueva (`internal/platform/...` e `internal/products/`) el proyecto dejó de compilar. La causa de fondo es una de las reglas más importantes de Go:
+
+> **En Go, la unidad de compilación es el _directorio_, no el archivo. Cada directorio es exactamente un paquete, y la identidad de ese paquete es su _ruta de import_ (la carpeta), no el nombre que pongas en la línea `package`.**
+
+De aquí salieron tres tipos de error distintos.
+
+### 1. Mismo `package handler` en carpetas distintas ≠ mismo paquete
+
+Varios archivos seguían declarando `package handler` aunque estaban repartidos en carpetas diferentes:
+
+```
+internal/handler/            → package handler
+internal/products/           → package handler   (¡otra carpeta!)
+internal/platform/server/respond/ → package handler   (¡otra más!)
+internal/platform/server/routes/  → package handler
+```
+
+Aunque el nombre coincidía, para Go son **paquetes diferentes** porque están en directorios diferentes. Por eso el código de `internal/products` no veía `Product`, `shopStore`, `JSON`, etc. (vivían en `internal/handler`) y aparecían errores como:
+
+```
+undefined: ProductStatus
+undefined: Product
+undefined: JSON
+undefined: shopStore
+```
+
+Dentro de un mismo paquete (misma carpeta) todo es visible sin importar nada. Pero **entre paquetes** hay que:
+
+1. Importar la ruta del otro paquete.
+2. Que el símbolo esté **exportado** (empiece por mayúscula).
+3. Cualificarlo con el nombre del paquete: `respond.JSON(...)`, `products.Register(...)`.
+
+### 2. El nombre del paquete debería coincidir con el de la carpeta
+
+Tener `package handler` dentro de la carpeta `respond/` o `routes/` es legal, pero confunde: te obliga a importar `.../routes` y luego escribir `handler.NewRouter()`. La convención de Go es que **el nombre del paquete coincida con el nombre de la carpeta**. Por eso se renombró:
+
+| Carpeta | Antes | Ahora |
+|---|---|---|
+| `internal/platform/server/respond` | `package handler` | `package respond` |
+| `internal/platform/server/routes`  | `package handler` | `package routes` |
+| `internal/products`                | `package handler` | `package products` |
+
+### 3. Imports apuntando a rutas que ya no existían
+
+Al mover carpetas, los `import` quedaron obsoletos. `main.go` y el test de middleware seguían importando las rutas viejas:
+
+```go
+// antes (rutas que ya no existen)
+"github.com/javier/go-http-server/internal/config"
+"github.com/javier/go-http-server/internal/handler"
+"github.com/javier/go-http-server/internal/middleware"
+"github.com/javier/go-http-server/internal/server"
+
+// ahora (rutas reales tras la reorganización)
+"github.com/javier/go-http-server/internal/platform/config"
+"github.com/javier/go-http-server/internal/platform/server/middleware"
+"github.com/javier/go-http-server/internal/platform/server/routes"
+"github.com/javier/go-http-server/internal/platform/server/httpserver"
+```
+
+La ruta de import es **relativa al `module`** declarado en `go.mod` (`github.com/javier/go-http-server`) + la ruta de la carpeta. Si mueves la carpeta, cambias el import.
+
+### Regla práctica al reorganizar carpetas en Go
+
+1. Una carpeta = un paquete; muévelo entero, no a medias.
+2. El `package` de todos los archivos de esa carpeta debe ser igual y, por convención, igual al nombre de la carpeta.
+3. Tras mover, actualiza **todos** los `import` que apuntaban ahí.
+4. Lo que use otro paquete debe estar **exportado** (mayúscula) y cualificado (`paquete.Símbolo`).
+5. Verifica con `go build ./...` y `go vet ./...` (compilan todos los paquetes del módulo).

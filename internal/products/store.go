@@ -1,75 +1,34 @@
-package handler
+package products
 
 import (
-	"crypto/rand"
-	"encoding/hex"
 	"fmt"
 	"sync"
 	"time"
 )
 
-// shopStore is the central in-memory store for the entire application.
+// shopStore is the in-memory store backing the product repository.
 type shopStore struct {
 	mu sync.RWMutex
 
 	products   map[int64]*Product
 	productSeq int64
-
-	// collectionProducts maps collection ID → ordered list of product IDs.
-	collections          map[int64]*Collection
-	collectionProducts   map[int64][]int64
-	collectionSeq        int64
-
-	carts    map[string]*Cart
-	cartSeq  int64
-
-	orders    map[int64]*Order
-	orderSeq  int64
 }
-
-var shop = newShopStore()
 
 func newShopStore() *shopStore {
 	s := &shopStore{
-		products:           make(map[int64]*Product),
-		collections:        make(map[int64]*Collection),
-		collectionProducts: make(map[int64][]int64),
-		carts:              make(map[string]*Cart),
-		orders:             make(map[int64]*Order),
+		products: make(map[int64]*Product),
 	}
 	s.seed()
 	return s
 }
 
-// nextProductID allocates the next product ID (must hold write lock).
+// nextProductID allocates the next product ID (must hold the write lock).
 func (s *shopStore) nextProductID() int64 {
 	s.productSeq++
 	return s.productSeq
 }
 
-func (s *shopStore) nextCollectionID() int64 {
-	s.collectionSeq++
-	return s.collectionSeq
-}
-
-func (s *shopStore) nextCartItemID() int64 {
-	s.cartSeq++
-	return s.cartSeq
-}
-
-func (s *shopStore) nextOrderID() int64 {
-	s.orderSeq++
-	return s.orderSeq
-}
-
-// cartToken generates a random hex token for a cart.
-func cartToken() string {
-	b := make([]byte, 16)
-	_, _ = rand.Read(b)
-	return hex.EncodeToString(b)
-}
-
-// seed pre-populates the store with football team jersey products and collections.
+// seed pre-populates the store with football team jersey products.
 func (s *shopStore) seed() {
 	now := time.Date(2024, 7, 1, 0, 0, 0, 0, time.UTC)
 	pub := now
@@ -188,12 +147,9 @@ func (s *shopStore) seed() {
 		},
 	}
 
-	var productIDs []int64
-
 	for _, seed := range seeds {
 		s.productSeq++
 		pid := s.productSeq
-		productIDs = append(productIDs, pid)
 
 		imgID := pid*100 + 1
 		altStr := seed.imageAlt
@@ -268,84 +224,5 @@ func (s *shopStore) seed() {
 			PublishedAt: &pub,
 		}
 		s.products[pid] = p
-	}
-
-	// Collections
-	type collectionSeed struct {
-		title      string
-		handle     string
-		bodyHTML   string
-		productIdx []int // 0-based indices into productIDs
-	}
-
-	collections := []collectionSeed{
-		{
-			title:      "La Liga",
-			handle:     "la-liga",
-			bodyHTML:   "<p>Camisetas oficiales de los mejores equipos de La Liga española.</p>",
-			productIdx: []int{0, 1, 2, 3, 4}, // Real Madrid x2, Barça x2, Atlético
-		},
-		{
-			title:      "Premier League",
-			handle:     "premier-league",
-			bodyHTML:   "<p>Camisetas oficiales de los clubes de la Premier League inglesa.</p>",
-			productIdx: []int{6, 7}, // Man City, Liverpool
-		},
-		{
-			title:      "Selecciones Nacionales",
-			handle:     "selecciones-nacionales",
-			bodyHTML:   "<p>Equipaciones oficiales de las selecciones nacionales de fútbol.</p>",
-			productIdx: []int{5}, // España
-		},
-		{
-			title:      "Equipaciones Locales",
-			handle:     "equipaciones-locales",
-			bodyHTML:   "<p>Todas las camisetas de equipación local de la temporada 2024/25.</p>",
-			productIdx: []int{0, 2, 4, 5, 6, 7},
-		},
-		{
-			title:      "Equipaciones Visitante",
-			handle:     "equipaciones-visitante",
-			bodyHTML:   "<p>Todas las camisetas de equipación visitante de la temporada 2024/25.</p>",
-			productIdx: []int{1, 3},
-		},
-		{
-			title:      "Adidas",
-			handle:     "adidas",
-			bodyHTML:   "<p>Camisetas oficiales fabricadas por Adidas.</p>",
-			productIdx: []int{0, 1, 5},
-		},
-		{
-			title:      "Nike",
-			handle:     "nike",
-			bodyHTML:   "<p>Camisetas oficiales fabricadas por Nike.</p>",
-			productIdx: []int{2, 3, 4, 7},
-		},
-		{
-			title:      "Puma",
-			handle:     "puma",
-			bodyHTML:   "<p>Camisetas oficiales fabricadas por Puma.</p>",
-			productIdx: []int{6},
-		},
-	}
-
-	for _, cs := range collections {
-		s.collectionSeq++
-		cid := s.collectionSeq
-		var pids []int64
-		for _, idx := range cs.productIdx {
-			pids = append(pids, productIDs[idx])
-		}
-		s.collectionProducts[cid] = pids
-		s.collections[cid] = &Collection{
-			ID:          cid,
-			Title:       cs.title,
-			Handle:      cs.handle,
-			BodyHTML:    cs.bodyHTML,
-			ProductIDs:  pids,
-			CreatedAt:   now,
-			UpdatedAt:   now,
-			PublishedAt: &pub,
-		}
 	}
 }
