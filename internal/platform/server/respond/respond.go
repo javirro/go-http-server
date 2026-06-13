@@ -35,6 +35,8 @@ func ErrorResponse(w http.ResponseWriter, r *http.Request, status int, message s
 
 // DecodeJSON reads and decodes the request body into v.
 // Returns false and writes a 400 response if decoding fails.
+// this type of decoder is used because server works with streams of data,
+// so we need to limit the size of the request body.
 func DecodeJSON(w http.ResponseWriter, r *http.Request, v any) bool {
 	r.Body = http.MaxBytesReader(w, r.Body, 1<<20) // 1 MB limit
 	dec := json.NewDecoder(r.Body)

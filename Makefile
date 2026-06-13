@@ -16,8 +16,9 @@ build:
 	@mkdir -p $(BUILD_DIR)
 	$(GO) build $(GOFLAGS) -ldflags "$(LDFLAGS)" -o $(BUILD_DIR)/$(BINARY) $(CMD_PATH)
 
-## Run the server locally with human-readable logs
+## Run the server locally loading .env if present
 run:
+	@[ -f .env ] && export $$(grep -v '^#' .env | grep -v '^$$' | xargs) ; \
 	LOG_FORMAT=text LOG_LEVEL=debug $(GO) run $(CMD_PATH)
 
 ## Run all tests
